@@ -1,0 +1,22 @@
+/.venv/
+__pycache__/
+*.pyc
+
+# the song, its lyrics and the film are not ours to redistribute, or too large
+/input/
+/out/
+/assets/fonts/
+/assets/ref/
+/assets/gen/raw/
+
+# working files and notes
+/docs/进度.md
+/docs/歌曲调研.md
+
+/work/*
+!/work/gen/
+/work/gen/*
+!/work/gen/prompts.py
+!/work/gen/prompts_c.py
+!/work/gen/bars_c.py
+!/work/gen/pick_c.py
