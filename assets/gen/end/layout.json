@@ -1,0 +1,233 @@
+{
+ "centre": [
+  455.0,
+  700.0
+ ],
+ "patches": {
+  "mouth_flat": [
+   398,
+   824
+  ],
+  "mouth_mid": [
+   398,
+   824
+  ],
+  "hl_0": [
+   323,
+   664
+  ],
+  "hl_1": [
+   317,
+   664
+  ],
+  "hl_2": [
+   316,
+   664
+  ],
+  "hl_dot": [
+   363,
+   674
+  ],
+  "hl_f0": [
+   364,
+   723
+  ],
+  "hl_f1": [
+   358,
+   731
+  ],
+  "hl_f2": [
+   362,
+   733
+  ],
+  "eye_closed@wind_a": [
+   254,
+   622
+  ],
+  "eye_half@wind_a": [
+   267,
+   622
+  ],
+  "eye_closed@wind_b": [
+   266,
+   622
+  ],
+  "eye_half@wind_b": [
+   267,
+   622
+  ],
+  "eye_closed@wind_c": [
+   266,
+   622
+  ],
+  "eye_half@wind_c": [
+   267,
+   622
+  ],
+  "eye_closed@wind_d": [
+   266,
+   622
+  ],
+  "eye_half@wind_d": [
+   254,
+   622
+  ],
+  "eye_closed@wind_x": [
+   266,
+   622
+  ],
+  "eye_half@wind_x": [
+   267,
+   622
+  ],
+  "eye_closed@wind_e": [
+   266,
+   622
+  ],
+  "eye_half@wind_e": [
+   267,
+   622
+  ],
+  "eye_closed@wind_f": [
+   266,
+   622
+  ],
+  "eye_half@wind_f": [
+   267,
+   622
+  ],
+  "eye_closed@wind_g": [
+   266,
+   622
+  ],
+  "eye_half@wind_g": [
+   267,
+   622
+  ],
+  "eye_closed@wind_h": [
+   266,
+   622
+  ],
+  "eye_half@wind_h": [
+   267,
+   622
+  ],
+  "eye_closed@wind_i": [
+   266,
+   622
+  ],
+  "eye_half@wind_i": [
+   267,
+   622
+  ],
+  "eye_closed@wind_j": [
+   266,
+   622
+  ],
+  "eye_half@wind_j": [
+   267,
+   622
+  ],
+  "eye_closed@wind_k": [
+   266,
+   622
+  ],
+  "eye_half@wind_k": [
+   267,
+   622
+  ],
+  "eye_closed@wind_l": [
+   266,
+   622
+  ],
+  "eye_half@wind_l": [
+   267,
+   622
+  ]
+ },
+ "wind": [
+  [
+   "wind_a",
+   4
+  ],
+  [
+   "wind_b",
+   4
+  ],
+  [
+   "wind_c",
+   4
+  ],
+  [
+   "wind_d",
+   4
+  ],
+  [
+   "wind_x",
+   4
+  ],
+  [
+   "wind_e",
+   6
+  ],
+  [
+   "wind_f",
+   8
+  ],
+  [
+   "wind_g",
+   10
+  ],
+  [
+   "wind_h",
+   12
+  ],
+  [
+   "wind_i",
+   14
+  ]
+ ],
+ "loop": [
+  [
+   "wind_j",
+   14
+  ],
+  [
+   "wind_k",
+   14
+  ],
+  [
+   "wind_l",
+   14
+  ],
+  [
+   "wind_i",
+   14
+  ]
+ ],
+ "strike": {
+  "stroke": [
+   "hl_0",
+   "hl_1",
+   "hl_2"
+  ],
+  "glints": [
+   [
+    "hl_dot",
+    6
+   ],
+   [
+    "hl_f0",
+    8
+   ],
+   [
+    "hl_f1",
+    10
+   ],
+   [
+    "hl_f2",
+    12
+   ]
+  ]
+ }
+}
