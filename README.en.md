@@ -89,6 +89,8 @@ See the [documentation index](docs/README.md) for the original planning and revi
 - **Timing:** a shared song clock combines a beat grid with Japanese character timing mapped from a user-provided romaji karaoke ASS file.
 - **Assembly:** nine 3D shot groups feed 21 rendered sections, which are joined using a global 30 fps frame table and one continuous song track.
 
+![Production workflow: story, music timing and character artwork feed 2D and 3D shots, review and assembly. Diagram labels are in Chinese.](docs/images/workflow.png)
+
 Reusable references include [typesetting](src/typo/engine.py), [the 2D engine](src/engine.py), [EXR compositing](src/npr/comp.py), [eye animation](src/clips/eye_anim.py), [writing the final name](src/clips/s13b.py) and [section assembly](src/assemble_full.py).
 
 ## Setup and limits
