@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/hero.jpg" alt="Who Is Girl A? A girl whose eyes are covered by a black bar, surrounded by phones and rumours" width="100%">
+  <img src="docs/images/cover-masked.jpg" alt="Who Is Girl A? A girl whose eyes are covered by a black bar, surrounded by phones and rumours" width="100%">
 </p>
 
 <h1 align="center">Fable5.5-YoungGirlA</h1>

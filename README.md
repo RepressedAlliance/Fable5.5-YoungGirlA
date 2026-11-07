@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/hero.jpg" alt="谁是少女A：被黑条遮住眼睛的女孩，周围是手机、媒体与传言" width="100%">
+  <img src="docs/images/cover-masked.jpg" alt="谁是少女A：被黑条遮住眼睛的女孩，周围是手机、媒体与传言" width="100%">
 </p>
 
 <h1 align="center">Fable5.5-YoungGirlA</h1>
