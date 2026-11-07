@@ -31,7 +31,7 @@ EYE_SOURCES = {"api_a_0": ("work/eye/api_a_0.png", _FULL), "e03": ("assets/gen/r
                "v2_stroke_0": ("work/eye/v2_stroke_0.png", _MAG), "v2_stroke_1": ("work/eye/v2_stroke_1.png", _MAG),
                "v3_a_0": ("work/eye/v3_a_0.png", _MAG), "v3_a_1": ("work/eye/v3_a_1.png", _MAG),
                "v3_c_0": ("work/eye/v3_c_0.png", _MAG), "v3_c_1": ("work/eye/v3_c_1.png", _MAG)}
-EYE_SOURCES["v4_a1_1"] = ("work/eye/v4_a1_1.png", _MAG)
+EYE_SOURCES["v4_a1_1"] = ("assets/gen/eyes/v4_a1_1.png", _MAG)
 EYE_SOURCES["v4_a0"] = ("work/eye/v4_a0.png", _MAG)
 EYE_DEFAULT = "v4_a1_1"   # chosen after three rounds of blind judging; see docs/进度.md
 TAKE = 195.77

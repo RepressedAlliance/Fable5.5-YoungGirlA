@@ -7,7 +7,14 @@ __pycache__/
 /out/
 /assets/fonts/
 /assets/ref/
-/assets/gen/raw/
+/assets/gen/raw/*
+!/assets/gen/raw/k01_flowers.png
+!/assets/gen/raw/r03_crayon.png
+!/assets/gen/raw/r12_chalk.png
+!/assets/gen/raw/r21_id.png
+!/assets/gen/raw/r22_candid.png
+!/assets/gen/raw/r23_class.png
+!/assets/gen/raw/t02_candid_gate.png
 
 # working files and notes
 /docs/进度.md
@@ -20,3 +27,21 @@ __pycache__/
 !/work/gen/prompts_c.py
 !/work/gen/bars_c.py
 !/work/gen/pick_c.py
+!/work/gen/ref_sheet_hand.png
+!/work/gen/ref_handpen.png
+
+# Selected production scripts and prompts, not render caches or account logs.
+!/work/eye/
+/work/eye/*
+!/work/eye/prompt_v4.txt
+!/work/eye/key6/
+/work/eye/key6/*
+!/work/eye/key6/gen.py
+!/work/eye/key6/gen_end.py
+!/work/eye/key6/gen_a3.py
+!/work/eye/key6/build_end.py
+!/work/eye/key6/build_a3.py
+!/work/eye/key6/rebuild_wind_soft.py
+!/work/eye/key6/picks.json
+!/work/eye/key6/picks3.json
+!/work/eye/key6/p_*.txt

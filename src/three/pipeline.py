@@ -9,6 +9,7 @@ import json
 import multiprocessing as mp
 import os
 os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+import shutil
 import subprocess
 import sys
 import time
@@ -19,7 +20,8 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "src" / "npr"), str(ROOT / "src" / "three")]
-BLENDER = r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe"
+BLENDER = (os.environ.get("BLENDER_EXE") or shutil.which("blender")
+           or r"C:\Program Files\Blender Foundation\Blender 5.2\blender.exe")
 KEEP_EXR = os.environ.get("SHOT_KEEP_EXR") == "1"
 LOST_AFTER = 900  # seconds, counted from when a frame is queued, so it allows for a long queue
 

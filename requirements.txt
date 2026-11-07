@@ -1,0 +1,14 @@
+# Python 3.12: versions used in the published film's environment.
+# Blender provides bpy/bmesh/mathutils in its own Python; do not pip-install bpy.
+numpy==2.5.4
+opencv-python-headless==5.0.0.93
+Pillow==13.0.0
+skia-python==144.1
+uharfbuzz==0.57.0
+OpenEXR==3.5.3
+scipy==1.18.1
+scikit-image==0.26.0
+librosa==1.0.0
+soundfile==0.14.0
+
+# Optional: install a matching PyTorch build separately for PAINT_GPU=1.
