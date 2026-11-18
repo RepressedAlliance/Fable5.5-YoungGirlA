@@ -43,6 +43,8 @@ ADULT_S = 0.120            # wide-shot pixels per picture pixel: a big hand besi
 ADULT_SLEEVE = (1.0, 0.72)
 SLEEVE_LOOSE = 0.5
 TICK = 15                  # the hand and the wax it lays down move together, on fifteens
+TAIL_FROM = 520.0          # picture pixels along the sleeve, past the picture's edge, where the stretched tail takes over
+TAIL_STRETCH = 24.0        # how far the last stretch of extruded sleeve is drawn out: far beyond any frame
 
 
 def S07_tip(rgba):
@@ -735,7 +737,13 @@ class Stickers(E.Clip):
                     im[..., :3] = np.where(wax[y0:y1, x0:x1, None], np.clip(tr["col"].astype(np.float32) / 255 * lit[y0:y1, x0:x1], 0, 1), im[..., :3])
                     pics[ck] = E.np_to_image(im)
             ex = HK.extrude(raw, ADULT_SLEEVE, loose=SLEEVE_LOOSE)
-            self.adult[key] = dict(img=E.np_to_image(ex), pics=pics, tip=tip, turn=turn, size=size, wax_at=(float(x0), float(y0)))
+            # where the sleeve crosses the picture's edge: the tail is carried on from a line across it, further along
+            H_, W_ = raw.shape[:2]
+            edge = np.zeros((H_, W_), bool)
+            edge[H_ - 3, :] = edge[:, W_ - 3] = True
+            ey, ex_ = np.nonzero(edge & (raw[..., 3] > 0.5))
+            self.adult[key] = dict(img=E.np_to_image(ex), pics=pics, tip=tip, turn=turn, size=size, wax_at=(float(x0), float(y0)),
+                                   cross=(float(ex_.mean()), float(ey.mean())))
 
     def crayon_at(self, q):
         """Where the crayon is at time q in flower-picture pixels, the part it is on, and how far off the paper it is, 0 to 1."""
@@ -754,6 +762,40 @@ class Stickers(E.Clip):
                 seg = max(tr["cum"][k + 1] - tr["cum"][k], 1e-3)
                 return tr["pts"][k] + (tr["pts"][k + 1] - tr["pts"][k]) * (d - tr["cum"][k]) / seg, tr, 0.0
         return trs[-1]["pts"][-1], trs[-1], 0.0
+
+    def sleeve_with_tail(self, c, v, samp, paint):
+        """The hand picture, with its sleeve carried on far past what extrude() made. 2026-11-17: in the wide shot the
+        extruded sleeve still ended in the middle of the wall, cut straight across. Beyond a line across the sleeve,
+        the picture is drawn again stretched along the sleeve, so the cloth runs on, its outlines parallel, out of frame."""
+        dx, dy = ADULT_SLEEVE
+        n_ = math.hypot(dx, dy)
+        dx, dy = dx / n_, dy / n_
+        lx, ly = v["cross"][0] + dx * TAIL_FROM, v["cross"][1] + dy * TAIL_FROM
+        px, py = -dy, dx
+        far = 1e5
+
+        def half(sign):
+            p = skia.Path()
+            p.moveTo(lx + px * far, ly + py * far)
+            p.lineTo(lx - px * far, ly - py * far)
+            p.lineTo(lx - px * far + sign * dx * far, ly - py * far + sign * dy * far)
+            p.lineTo(lx + px * far + sign * dx * far, ly + py * far + sign * dy * far)
+            p.close()
+            return p
+        c.save()
+        c.clipPath(half(-1), doAntiAlias=False)
+        c.drawImage(v["img"], 0, 0, samp, paint)
+        c.restore()
+        c.save()
+        c.clipPath(half(1), doAntiAlias=False)
+        ang = math.degrees(math.atan2(dy, dx))
+        c.translate(lx, ly)
+        c.rotate(ang)
+        c.scale(TAIL_STRETCH, 1)
+        c.rotate(-ang)
+        c.translate(-lx, -ly)
+        c.drawImage(v["img"], 0, 0, samp, paint)
+        c.restore()
 
     def adult_hand(self, c, t):
         """Comes in as the first stroke starts, stays with the crayon on its own marks, and leaves before the stamp.
@@ -786,14 +828,14 @@ class Stickers(E.Clip):
         c.rotate(rot)
         c.scale(S_, S_)
         c.translate(-v["tip"][0], -v["tip"][1])
-        c.drawImage(v["img"], 0, 0, samp, skia.Paint(AntiAlias=True, ColorFilter=skia.ColorFilters.Blend(E.col("#2A3A4C", 0.34), skia.BlendMode.kSrcIn)))
+        self.sleeve_with_tail(c, v, samp, skia.Paint(AntiAlias=True, ColorFilter=skia.ColorFilters.Blend(E.col("#2A3A4C", 0.34), skia.BlendMode.kSrcIn)))
         c.restore()
         c.save()
         c.translate(x, y)
         c.rotate(rot)
         c.scale(S_, S_)
         c.translate(-v["tip"][0], -v["tip"][1])
-        c.drawImage(v["img"], 0, 0, samp)
+        self.sleeve_with_tail(c, v, samp, None)
         c.drawImage(v["pics"][ck], v["wax_at"][0], v["wax_at"][1], samp)
         c.restore()
 
@@ -873,7 +915,12 @@ class Stickers(E.Clip):
             E.rect(c, q[0], q[1] - 0.26 * self.k0, 0.06 * self.k0, 0.26 * self.k0, E.RED)
         self.draw_print(c, t)
         self.flowers(c, t, s)
+        # the hand belongs to the picture in the cell: seen from far off, its sleeve goes out at the cell's edge, as out of
+        # a frame. (2026-11-17: drawn over the wall, the sleeve ended in mid-air, or had to be an arm two metres long.)
+        c.save()
+        c.clipRect(self.cell, doAntiAlias=True)
         self.adult_hand(c, t)
+        c.restore()
         self.stamp(c, t, s)
 
     def apply(self, c, s, cx, cy, jolt=0.0):

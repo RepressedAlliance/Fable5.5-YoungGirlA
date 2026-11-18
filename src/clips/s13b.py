@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 import skia
 from PIL import Image, ImageDraw, ImageFont
+from scipy.ndimage import median_filter
 from scipy.spatial import cKDTree
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -27,7 +28,11 @@ BEAT = (B[1] - B[0]) / 4
 # the note with the two flowers comes on first, under her left hand; the pen arrives as that hand goes
 NOTE_IN = (B[0], B[0] + 0.34)
 NOTE_LIFT = (B[0] + 0.92, B[0] + 1.30)
-HAND_S = 0.60              # picture pixels to sheet pixels: the same drawings all the way in, only the camera gets nearer
+# picture pixels to sheet pixels: the same drawing all the way in, only the camera gets nearer. 2026-11-17: the hand was about
+# two of her written characters long from point to cuff, tiny against her own writing; it is now about three
+HAND_PIC = "h60_write_top"
+HAND_S = 0.774
+SLEEVE_DIR = (1.0, 0.35)   # the forearm in h60_write_top runs out to the right, a little downwards
 LEFT_S = 0.60              # her other hand, which only puts the note down
 SLEEVE_LOOSE = 0.5         # the sleeve past the picture's edge eases wider towards the elbow, see handkit.extrude
 SLEEVE_PAD = 1900          # how far it is carried on, in picture pixels: far enough that its end, fill and outline, is off the screen at any distance the camera comes to
@@ -157,7 +162,10 @@ class Form(E.Clip):
         self.cuts = ()
         self.h = {}
         base = None
-        for key, name in (("rest", "h44_rest"), ("write", "h44_write"), ("lift", "h44_lift"), ("tight", "h44_tight")):
+        # 2026-11-17: one drawing for every moment, seen from straight above as the camera sees the sheet (h60_write_top). The four
+        # side-on drawings (h44_*) held the pen flat along the hand, from an angle the camera never has, and every change of
+        # drawing made the hand jump. Lifts show in the shadow, which falls further the higher the point is.
+        for key, name in (("rest", HAND_PIC), ("write", HAND_PIC), ("lift", HAND_PIC), ("tight", HAND_PIC)):
             raw = load_hand(name)
             tip = pen_tip(raw)
             cuff = cuff_centre(raw)
@@ -167,7 +175,7 @@ class Form(E.Clip):
             # the same hand: changing drawing moves the fingers and the pen, and never the wrist or the sleeve
             turn = math.degrees(math.atan2(base[1], base[0]) - math.atan2(v[1], v[0]))
             size = math.hypot(*base) / math.hypot(*v)
-            raw = HK.extrude(raw, (1.0, 0.72), pad=SLEEVE_PAD, loose=SLEEVE_LOOSE)
+            raw = HK.extrude(raw, SLEEVE_DIR, pad=SLEEVE_PAD, loose=SLEEVE_LOOSE)
             self.h[key] = dict(img=E.np_to_image(raw), tip=tip, turn=turn, size=size)
         # her other hand: it comes in from the lower left, so its sleeve is carried on that way
         self.left = {}
@@ -231,7 +239,7 @@ class Form(E.Clip):
                 dv = pts[-1] - pts[0]
                 # the fingers close on a stroke pulled down, and stay as they are on a stroke drawn across
                 key = "tight" if abs(dv[1]) > abs(dv[0]) and st["ci"] < FAST_FROM else "write"
-                return key, self.at(pts, u), 0.0
+                return key, self.at_len(st, u), 0.0
         u = E.ease_io(E.seg(q, *LIFTED), 1.6)
         a = ss[-1]["pts"][-1]
         b = np.array(REST)
@@ -296,36 +304,134 @@ class Form(E.Clip):
             g = cv2.warpAffine(np.asarray(im), M, (box, box), flags=cv2.INTER_CUBIC).astype(np.float32) / 255
             ca, sa = math.cos(math.radians(turn)), math.sin(math.radians(turn))
             first = len(self.strokes)
+            # distance from the glyph's edge, in the ink's own pixels: greatest along the middle of each line, where it is half the line's width
+            dt = cv2.distanceTransform((g > 0.5).astype(np.uint8), cv2.DIST_L2, 5)
             for pts, taper in strokes:
                 q = []
                 for u, v in pts:
                     u_, v_ = u / 100 - 0.5, v / 100 - 0.5
                     q.append((x0 + em * 0.5 + em * (u_ * ca - v_ * sa), y0 + em * 0.5 + em * (u_ * sa + v_ * ca)))
                 dense = _catmull(q, 24)
+                # 2026-11-18: the traced centre lines lie up to 3 pixels of the sheet off the middle of the lettering's lines. Each point is
+                # moved across the stroke onto the middle of its line, and that line's half width is kept with it (used below).
+                b = (dense - (x0, y0)) * k
+                tg = np.gradient(b, axis=0)
+                nrm = np.column_stack([-tg[:, 1], tg[:, 0]]) / np.maximum(np.hypot(*tg.T), 1e-6)[:, None]
+                offs = np.arange(-9, 10)
+                cand = b[:, None, :] + offs[None, :, None] * nrm[:, None, :]
+                ci_ = np.clip(np.rint(cand).astype(int), 0, box - 1)
+                val = dt[ci_[..., 1], ci_[..., 0]]
+                # the nearer of equal maxima, so a point by a crossing is not pulled into the other line
+                shift = offs[np.argmax(val - 0.02 * np.abs(offs)[None, :], axis=1)].astype(np.float32)
+                # the trace is off by a smooth amount along the stroke; where another line meets it the widest point moves into the meeting,
+                # which is not the line's middle, so only the run of the stroke as a whole counts
+                shift = median_filter(shift, size=41, mode="nearest")
+                b = b + shift[:, None] * nrm
+                # Then across the line from there to the glyph's edge, on each side. Where another line meets this one, that side runs on
+                # into it: there that side's edge is taken from the stroke on either side of the meeting. The side that does not meet
+                # anything keeps its own edge, so the line's outline is the lettering's to the pixel.
+                steps = np.arange(0.0, 40.0, 0.5)
+                n_ = np.arange(len(b))
+                arc = np.concatenate([[0], np.cumsum(np.hypot(*np.diff(b, axis=0).T))])
+                edges = []
+                for sg_ in (1, -1):
+                    c_ = b[:, None, :] + sg_ * steps[None, :, None] * nrm[:, None, :]
+                    ci_ = np.clip(np.rint(c_).astype(int), 0, box - 1)
+                    out_ = g[ci_[..., 1], ci_[..., 0]] < 0.5
+                    e = np.where(out_.any(axis=1), steps[np.argmax(out_, axis=1)], steps[-1])
+                    med = np.median(e)
+                    # the line's own edge changes slowly along it; a meeting, or the ink filling the corner of one, stands out from that.
+                    # The line's run of edges is taken without the meetings first, so a long meeting does not raise it
+                    rough = e < 1.35 * med + 1.0
+                    run = np.interp(n_, n_[rough], e[rough]) if rough.sum() >= 2 else e
+                    own = e <= median_filter(run, size=31, mode="nearest") + 1.5
+                    # across a meeting the edge runs straight on from either side of it; the rounded tips at the stroke's ends are not
+                    # its line, so a meeting by an end takes the edge from the line's side only
+                    anchor = own & (arc > 1.5 * med) & (arc < arc[-1] - 1.5 * med)
+                    if anchor.sum() >= 2 and not own.all():
+                        e = np.where(own, e, np.interp(n_, n_[anchor], e[anchor]))
+                    edges.append(e / k)
+                dense = (x0, y0) + b / k
                 seg_ = np.hypot(*(dense[1:] - dense[:-1]).T)
-                self.strokes.append(dict(pts=dense, ci=ci, L=float(seg_.sum()), u=np.concatenate([[0], np.cumsum(seg_)]) / max(seg_.sum(), 1e-3)))
+                self.strokes.append(dict(pts=dense, ci=ci, L=float(seg_.sum()), u=np.concatenate([[0], np.cumsum(seg_)]) / max(seg_.sum(), 1e-3),
+                                         nrm=nrm, ep=edges[0], em=edges[1]))
             ys, xs = np.nonzero(g > 0.003)
             sx, sy = x0 + xs / k, y0 + ys / k        # the pixels of this character, on the sheet
             P = np.column_stack([sx, sy])
             best = np.full(len(P), -1, np.int32)
-            near = np.full(len(P), 1e9, np.float32)
             nu = np.zeros(len(P), np.float32)
-            near_i = np.zeros(len(P), np.int32)
-            nu_near = np.zeros(len(P), np.float32)
-            R = em * 0.032                           # a little over half the width of the pen's line
+            # Each stroke's own outline, measured above. 2026-11-18: one width for every stroke, a little over half the widest line, gave
+            # an earlier stroke the edge of any later one that met it, and a stub of the later stroke showed beside the earlier one before
+            # the pen got there.
+            dists, idxs = [], []
             for i in range(first, len(self.strokes)):
                 st = self.strokes[i]
                 d, idx = cKDTree(st["pts"]).query(P)
-                closer = d < near
-                near[closer] = d[closer]
-                near_i[closer] = i
-                nu_near[closer] = st["u"][idx[closer]]
-                take = (best < 0) & (d <= R)
+                dists.append(d)
+                idxs.append(idx)
+                # a pixel within this stroke's own outline (and its soft edge) goes to it, if no stroke written before has it; past the
+                # stroke's ends, within its rounded tip
+                aa = 0.5 / k
+                off = np.einsum("ij,ij->i", P - st["pts"][idx], st["nrm"][idx])
+                inside = (off <= st["ep"][idx] + aa) & (off >= -st["em"][idx] - aa) & (d <= np.maximum(st["ep"], st["em"])[idx] + aa)
+                take = (best < 0) & inside
                 best[take] = i
                 nu[take] = st["u"][idx[take]]
+            # What is in no stroke's own outline is where strokes meet: the ink filling the corner between them. It comes with the last
+            # of them to be written, not the first, or the first shows a bump where the next will join it.
             none = best < 0
-            best[none] = near_i[none]
-            nu[none] = nu_near[none]
+            D = np.stack(dists)[:, none]
+            late = np.where(D <= D.min(axis=0) + 1.0, np.arange(first, len(self.strokes))[:, None], -1).max(axis=0)
+            best[none] = late
+            nu[none] = np.array([self.strokes[j]["u"][idxs[j - first][q]] for j, q in zip(late, np.flatnonzero(none))])
+            # Where two strokes' pixels meet along an edge they interleave a pixel or two deep, and the first one shown has a ragged edge
+            # where the second will join it: each pixel goes with most of those round it.
+            labs = list(range(first, len(self.strokes)))
+            votes = []
+            for i in labs:
+                m = np.zeros((box, box), np.float32)
+                m[ys[best == i], xs[best == i]] = 1.0
+                votes.append(cv2.boxFilter(m, -1, (5, 5), normalize=False)[ys, xs])
+            best = np.array(labs)[np.argmax(np.stack(votes), axis=0)]
+            # A stroke shows as one piece: a fleck of its pixels not joined to the rest is the edge of a neighbouring stroke, and
+            # would show ahead of it. Each such fleck goes to the next nearest stroke.
+            solid = g[ys, xs] > 0.25
+            for i in range(first, len(self.strokes)):
+                m = np.zeros((box, box), np.uint8)
+                mine = (best == i) & solid
+                # a stroke crossed by an earlier one is in two pieces, joined through it
+                m[ys[mine | ((best < i) & (best >= first) & solid)], xs[mine | ((best < i) & (best >= first) & solid)]] = 1
+                n_, cc = cv2.connectedComponents(m, connectivity=8)
+                if n_ <= 2:
+                    continue
+                sizes = np.bincount(cc[ys[mine], xs[mine]], minlength=n_)
+                keep = int(np.argmax(sizes[1:])) + 1
+                stray = mine & (cc[ys, xs] != keep)
+                if stray.any():
+                    others = [j for j in range(first, len(self.strokes)) if j != i]
+                    dd = np.stack([cKDTree(self.strokes[j]["pts"]).query(P[stray]) for j in others])
+                    pick = dd[:, 0, :].argmin(0)
+                    best[stray] = np.array(others)[pick]
+                    nu[stray] = np.array([self.strokes[others[p_]]["u"][int(dd[p_, 1, q_])] for q_, p_ in enumerate(pick)])
+            # Last, thin spurs on a stroke's edge where another stroke leaves it: a pixel or two of the other one, which would show as a fringe
+            # of dots before it is written. A stroke's own pointed ends touch no other stroke and stay.
+            disk = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+            for i in labs:
+                m = np.zeros((box, box), np.uint8)
+                m[ys[best == i], xs[best == i]] = 1
+                o = np.zeros((box, box), np.uint8)
+                o[ys[best != i], xs[best != i]] = 1
+                spur = (m & ~cv2.morphologyEx(m, cv2.MORPH_OPEN, disk)) & cv2.dilate(o, np.ones((3, 3), np.uint8))
+                sel = (best == i) & (spur[ys, xs] > 0)
+                if sel.any():
+                    others = [j for j in labs if j != i]
+                    dd = np.stack([cKDTree(self.strokes[j]["pts"]).query(P[sel])[0] for j in others])
+                    best[sel] = np.array(others)[dd.argmin(0)]
+            # where along its stroke each pixel is, now that every pixel has its stroke
+            for i in labs:
+                mine = best == i
+                if mine.any():
+                    nu[mine] = self.strokes[i]["u"][cKDTree(self.strokes[i]["pts"]).query(P[mine])[1]]
             gx = np.round((sx - bx) * k).astype(int)
             gy = np.round((sy - by) * k).astype(int)
             alpha[gy, gx] = np.maximum(alpha[gy, gx], g[ys, xs])
@@ -523,6 +629,15 @@ class Form(E.Clip):
                 r = r0 + (r1 - r0) * u
                 return key, (x, y), z, r, br, q, 1.0
         return "write", tuple(self.after_strike), 0.0, 5.0, 0.0, q, 1.0
+
+    def at_len(self, st, u):
+        """The point at fraction u of a stroke's LENGTH. 2026-11-17: the point used to go by the index of the traced points, which
+        are not evenly spaced, while the ink goes by length (make_ink), so the point ran ahead of its ink or fell behind it and
+        ink came up where the pen was not."""
+        uu = st["u"]
+        k = min(max(int(np.searchsorted(uu, u, side="right")) - 1, 0), len(uu) - 2)
+        w = (u - uu[k]) / max(uu[k + 1] - uu[k], 1e-9)
+        return tuple(st["pts"][k] + (st["pts"][k + 1] - st["pts"][k]) * w)
 
     def at(self, pts, u):
         i = u * (len(pts) - 1)
