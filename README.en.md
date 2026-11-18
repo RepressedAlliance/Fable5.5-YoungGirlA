@@ -39,6 +39,15 @@ MV: <b>RepressedAlliance × Claude Code × Codex</b></p>
 
 **[Watch the complete MV on Bilibili](https://www.bilibili.com/video/BV1CU4q6EELF/)** · 4:02 · 1920×1080 · 30 fps
 
+## Changelog
+
+**2026-11-18**
+- Outro train: passengers now sit on the benches. Rin, the old woman, the office worker and the woman in beige no longer float above the seat or have their legs pass through it; the old woman moved along the bench so Rin no longer hides her face; the camera tilts down slightly so Rin's shoes stay in frame.
+- Handwritten name: strokes no longer show a stub before the pen reaches them.
+- Other: the gate photographers stand on their ladders, a folding chair no longer sits on someone's feet, bystanders moved out of the tripods; the outro classroom loses a broken line on the chair back and a scrap of skirt on the desk.
+
+Full history in [CHANGELOG.md](CHANGELOG.md) (Chinese).
+
 ## The story
 
 A girl appears in the news under an anonymous label: “Girl A.” Magazines, comments, rankings and bystanders assign her conflicting identities. The more people define her, the harder it becomes to see the person behind the label.
