@@ -87,6 +87,8 @@ def build():
     back_chair.location = (back_chair.location.x + 0.80, back_chair.location.y + 0.06, back_chair.location.z)
     back_chair.rotation_euler = (0, 0, 0.45)
     bpy.data.objects["bag"].location.x += 3 * 0.46
+    # the two chairs left out in the aisle must not stand in the next desk either (2026-11-17)
+    classroom.settle_chairs(desks, fixed=(classroom.HER,))
     sun = kit.sun(sc, S.SUN)
     cam = kit.camera(sc, lens=S.LENS, clip_end=40000)
     # her newspaper, and everything the last clip nailed up

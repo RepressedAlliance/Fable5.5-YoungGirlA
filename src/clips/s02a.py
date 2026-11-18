@@ -19,6 +19,7 @@ import shared_gate as S  # noqa: E402
 BACK = 23.24                 # the camera is back at the full frame
 REAL0, REAL1 = 23.00, 23.32  # the real picture opens up through the dots
 PITCH_END = 0.50             # the dots end this fine, compared with the photo's at Z_GATE
+USE_DOTS = False             # the old opening through the dots, kept only for reference
 
 
 def star(c, x, y, r, color):
@@ -151,7 +152,8 @@ class Gate(seq3d.Seq3D):
         super().overlay(c, t)
 
     def frame_rgb(self, t):
-        if t >= REAL1:
+        # 2026-11-17: the shot no longer comes back out of the photo's dots; s01b cuts straight to the real gate
+        if t >= REAL1 or not USE_DOTS:
             return super().frame_rgb(t)
         im = K.seq_frame(self.shot, t, self.t0)
         rgb = self.print_frame(im[..., ::-1].astype(np.float32) / 255, t)

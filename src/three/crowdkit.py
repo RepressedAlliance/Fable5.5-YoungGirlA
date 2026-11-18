@@ -21,9 +21,10 @@ def _flip_uv(ob):
 
 
 class Crowd:
-    def __init__(self, people, sun, pos_fn, tilt=0.0, shadows=True):
-        """pos_fn(person, t) -> (x, y). tilt 0..1: how far a card leans back to face a lens above it, about its feet."""
-        self.people, self.pos_fn, self.tilt = people, pos_fn, tilt
+    def __init__(self, people, sun, pos_fn, tilt=0.0, shadows=True, room=None, poles=()):
+        """pos_fn(person, t) -> (x, y). tilt 0..1: how far a card leans back to face a lens above it, about its feet.
+        room(y, z) -> (xmin, xmax): where the set behind people starts (setkit.pull_to_lens); None leaves the cards where they stand."""
+        self.people, self.pos_fn, self.tilt, self.room, self.poles = people, pos_fn, tilt, room, poles
         self.cards = []
         for p in people:
             cards = {}
@@ -39,6 +40,7 @@ class Crowd:
                 f = setkit.Figure(mirrored if own else DIR / f"{p['pid']}_{d}.png", nm, px, r["sole"], col, sun=sun if shadows else None, img_wh=tuple(r["wh"]), uid=UID_CROWD)
                 if flip and not own:
                     _flip_uv(f.card)
+                    f.uv_flipped = True
                     if f.shadow is not None:
                         _flip_uv(f.shadow)
                 f.show(False)
@@ -55,8 +57,10 @@ class Crowd:
             cur.show(True)
             self.shown[i] = cur
             x, y = self.pos_fn(p, t)
-            pos = (x, y, p["z"])
+            pos = (x, y, p["z"] + p.get("lift", 0.0))
             cur.place(pos, eye)
+            if p.get("lift"):
+                cur.place_shadow((*C.seen_at(p, x, y, eye), p["z"]))
             if self.tilt:
                 # a lens above them: the card leans back about its feet, or a person seen from a crane is squashed
                 dx, dy, dz = eye[0] - x, eye[1] - y, eye[2] - p["z"] - 0.9
@@ -65,6 +69,13 @@ class Crowd:
                     r_ = Vector((0, 0, 1)).cross(Vector((dx, dy, 0))).normalized()
                     m = Matrix.Translation(pos) @ Matrix.Rotation(-a, 4, r_) @ Matrix.Translation((-pos[0], -pos[1], -pos[2]))
                     cur.card.matrix_world = m @ cur.card.matrix_world
+        shown = [s_ for s_ in self.shown if s_ is not None]
+        for p, f in zip(self.people, self.shown):
+            if p.get("pull") and f is not None:
+                setkit.pull_by(f, shown, eye, p["pull"])
+        if self.room:
+            # all at once, so nobody is brought in front of someone, or a pole, who stands in front of them
+            setkit.pull_to_lens_all([s_ for s_ in self.shown if s_ is not None], eye, self.room, self.poles)
 
 
 def more_bounces(sc):

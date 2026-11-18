@@ -239,7 +239,103 @@ def build(ceiling=True):
     for c in range(COLS):
         for r in range(ROWS):
             desks[(c, r)] = desk(M, c, r, f"desk_{c}_{r}", fixed=(c, r) == HER)
+    settle_chairs(desks, fixed=(HER,))
     return M, desks
+
+
+# ---------------------------------------------------------------- nothing stands in anything else
+# 2026-11-17: chairs were left wherever the random pull and turn put them, and a pulled-out chair's back went into the
+# front of the desk behind it. Every chair is now checked against every desk and every other chair, on the floor plan.
+DESK_HALF = (0.31, 0.22)                   # the desk top, around its centre
+CHAIR_BOX = (-0.19, 0.19, -0.205, 0.19)    # the chair's footprint around its seat origin: x0, x1, y0 (back), y1 (front)
+CHAIR_BACK = (-0.205, -0.17)               # the strip the back and its posts take up
+LEGS = [(dx, dy) for dx in (-0.28, 0.28) for dy in (-0.19, 0.19)]
+GAP = 0.025
+
+
+def _corners(cx, cy, ang, x0, x1, y0, y1):
+    ca, sa = math.cos(ang), math.sin(ang)
+    return [(cx + x * ca - y * sa, cy + x * sa + y * ca) for x, y in ((x0, y0), (x1, y0), (x1, y1), (x0, y1))]
+
+
+def _apart(a, b, gap=GAP):
+    """True when two convex polygons on the floor are at least gap apart along some axis (separating axis test)."""
+    for poly in (a, b):
+        for (x0, y0), (x1, y1) in zip(poly, poly[1:] + poly[:1]):
+            nx, ny = y0 - y1, x1 - x0
+            ln = math.hypot(nx, ny)
+            nx, ny = nx / ln, ny / ln
+            pa = [x * nx + y * ny for x, y in a]
+            pb = [x * nx + y * ny for x, y in b]
+            if max(pa) + gap <= min(pb) or max(pb) + gap <= min(pa):
+                return True
+    return False
+
+
+def _inside(p, poly, margin):
+    """p within poly grown by margin."""
+    for (x0, y0), (x1, y1) in zip(poly, poly[1:] + poly[:1]):
+        nx, ny = y1 - y0, x0 - x1
+        ln = math.hypot(nx, ny)
+        if ((p[0] - x0) * nx + (p[1] - y0) * ny) / ln > margin:
+            return False
+    return True
+
+
+def _desk_xy(d):
+    """A desk's centre: a joined desk keeps the origin of its first part, the top, which is centred on the desk."""
+    return (d.location.x, d.location.y)
+
+
+def chair_ok(key, cx, cy, ang, desks_xy, chairs):
+    me = _corners(cx, cy, ang, *CHAIR_BOX)
+    back = _corners(cx, cy, ang, CHAIR_BOX[0], CHAIR_BOX[1], *CHAIR_BACK)
+    for k, (dx, dy) in desks_xy.items():
+        top = _corners(dx, dy, 0.0, -DESK_HALF[0], DESK_HALF[0], -DESK_HALF[1], DESK_HALF[1])
+        if k == key:
+            # its own desk: the seat may go in under the top, but the back stays out and no leg of either meets one of the other
+            if not _apart(back, top):
+                return False
+            if any(_inside((dx + lx, dy + ly), me, 0.03) for lx, ly in LEGS):
+                return False
+        elif not _apart(me, top):
+            return False
+    for k, (ox, oy, oa) in chairs.items():
+        if k != key and not _apart(me, _corners(ox, oy, oa, *CHAIR_BOX)):
+            return False
+    return True
+
+
+def settle_chairs(desks, fixed=()):
+    """Moves each chair that stands in something by the least it takes, trying first to straighten it, then to slide it.
+    Chairs whose key is in fixed are obstacles only. Returns the keys of chairs that were moved."""
+    desks_xy = {k: _desk_xy(d) for k, (d, c) in desks.items()}
+    chairs = {k: (c.location.x, c.location.y, c.rotation_euler.z) for k, (d, c) in desks.items()}
+    moved = []
+    steps = [i * 0.03 for i in range(-8, 9)]
+    for _ in range(3):
+        for k, (d, c) in desks.items():
+            if k in fixed:
+                continue
+            cx, cy, ang = chairs[k]
+            if chair_ok(k, cx, cy, ang, desks_xy, chairs):
+                continue
+            best = None
+            for f in (1.0, 0.5, 0.0):
+                for sx in steps:
+                    for sy in steps:
+                        cost = math.hypot(sx, sy) + abs(ang) * (1 - f) * 0.4
+                        if best is not None and cost >= best[0]:
+                            continue
+                        if chair_ok(k, cx + sx, cy + sy, ang * f, desks_xy, chairs):
+                            best = (cost, cx + sx, cy + sy, ang * f)
+            if best is None:
+                raise RuntimeError(f"no clear place for the chair of desk {k}")
+            chairs[k] = best[1:]
+            c.location.x, c.location.y = best[1], best[2]
+            c.rotation_euler.z = best[3]
+            moved.append(k)
+    return moved
 
 
 

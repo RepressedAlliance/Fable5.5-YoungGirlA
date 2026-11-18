@@ -120,7 +120,9 @@ if __name__ == "__main__":
         names = sys.argv[2:]
         for row in TABLE:
             if row[0] in names or (not names and not (WORK / f"{row[0]}.mp4").exists()):
-                render(*row)
+                # SECTION_WORKERS caps the workers, when a 3D render is sharing the machine
+                cap = int(os.environ.get("SECTION_WORKERS", "0"))
+                render(*row[:-1], min(row[-1], cap) if cap else row[-1])
         print("RENDER DONE", flush=True)
     elif cmd == "build":
         build()

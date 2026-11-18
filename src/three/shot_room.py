@@ -18,6 +18,12 @@ import shared_room as S  # noqa: E402
 ROOT = kit.ROOT
 
 
+# her blouse on its hanger: metres per picture pixel (hook to hem, 0.80 m), and the hanger hook's top in the picture
+UNI_M_PER_PX = 0.80 / 965
+UNI_HOOK_PX = (764.5, 26.0)
+UNI_WH = (1536, 1024)
+
+
 class Parts:
     """Many boxes and prisms in one mesh, one ink id. Vertices are relative to `pivot`, so moving things turn around the right point."""
 
@@ -479,37 +485,35 @@ def build(with_sheets):
     hk.lohi((hook[0] - 0.02, -0.006, hook[2] - 0.035), (hook[0] + 0.02, 0, hook[2] + 0.015))
     hk.cyl((hook[0], 0, hook[2] - 0.012), (hook[0], -0.042, hook[2] - 0.012), 0.005, 0, 6)
     hk.make()
-    uni = Parts("uniform", [M["pale"], M["dark"], M["tie"], M["woodd"], M["skirt"]], pivot=hook)
-    y = hook[1]
+    # 2026-11-17: the blouse built from prisms read as a cardboard box with a few lines on it. It is now a drawing of her own
+    # blouse on its hanger (assets/gen/cut/u01_uniform_hanger.png, Codex, from her model sheet), laid flat on a card that
+    # hangs from the hook and swings about it as before; its shadow on the wall is the same drawing's silhouette.
     hx0, hz = hook[0], hook[2]
-    # blouse
-    uni.prism([(hx0 - 0.20, hz - 0.08), (hx0 - 0.30, hz - 0.14), (hx0 - 0.33, hz - 0.46), (hx0 - 0.235, hz - 0.47), (hx0 - 0.205, hz - 0.30),
-               (hx0 - 0.195, hz - 0.68), (hx0 + 0.195, hz - 0.68), (hx0 + 0.205, hz - 0.30), (hx0 + 0.235, hz - 0.47), (hx0 + 0.33, hz - 0.46),
-               (hx0 + 0.30, hz - 0.14), (hx0 + 0.20, hz - 0.08), (hx0 + 0.04, hz - 0.055), (hx0 - 0.04, hz - 0.055)], y - 0.012, y + 0.002, 0)
-    # collar: a dark V-shaped flap
-    uni.prism([(hx0 - 0.145, hz - 0.075), (hx0 - 0.20, hz - 0.20), (hx0, hz - 0.34), (hx0 + 0.20, hz - 0.20), (hx0 + 0.145, hz - 0.075),
-               (hx0 + 0.04, hz - 0.055), (hx0, hz - 0.14), (hx0 - 0.04, hz - 0.055)], y - 0.018, y - 0.0105, 1)
-    uni.prism([(hx0 - 0.03, hz - 0.30), (hx0 + 0.03, hz - 0.30), (hx0 + 0.045, hz - 0.45), (hx0, hz - 0.42), (hx0 - 0.045, hz - 0.45)], y - 0.024, y - 0.0165, 2)
-    # sleeve cuffs
-    uni.prism([(hx0 - 0.33, hz - 0.42), (hx0 - 0.235, hz - 0.43), (hx0 - 0.235, hz - 0.47), (hx0 - 0.33, hz - 0.46)], y - 0.018, y - 0.0105, 1)
-    uni.prism([(hx0 + 0.33, hz - 0.42), (hx0 + 0.235, hz - 0.43), (hx0 + 0.235, hz - 0.47), (hx0 + 0.33, hz - 0.46)], y - 0.018, y - 0.0105, 1)
-    # hanger wire and wooden shoulders
-    uni.cyl((hx0, y - 0.0, hz - 0.012), (hx0, y - 0.0, hz - 0.055), 0.0035, 3, 5)
-    uni.prism([(hx0 - 0.21, hz - 0.095), (hx0, hz - 0.05), (hx0 + 0.21, hz - 0.095), (hx0 + 0.21, hz - 0.115), (hx0, hz - 0.07), (hx0 - 0.21, hz - 0.115)], y - 0.004, y + 0.004, 3)
-    # a blouse on a hanger hangs in folds: a few hard ink lines, drawn as the thinnest raised strips, so that it is cloth and not a card
-    for pts_ in (((hx0 - 0.12, hz - 0.36), (hx0 - 0.145, hz - 0.50), (hx0 - 0.115, hz - 0.66)), ((hx0 + 0.13, hz - 0.33), (hx0 + 0.105, hz - 0.46), (hx0 + 0.14, hz - 0.64)),
-                 ((hx0 - 0.03, hz - 0.50), (hx0 - 0.015, hz - 0.67)), ((hx0 - 0.285, hz - 0.20), (hx0 - 0.265, hz - 0.40)), ((hx0 + 0.285, hz - 0.20), (hx0 + 0.27, hz - 0.38))):
-        for a_, b_ in zip(pts_, pts_[1:]):
-            uni.cyl((a_[0], y - 0.0125, a_[1]), (b_[0], y - 0.0125, b_[1]), 0.0014, 1, 5)
-    uni_ob = uni.make()
+    UNI_PNG = kit.ROOT / "assets" / "gen" / "cut" / "u01_uniform_hanger.png"
+    UNI_SH = kit.ROOT / "assets" / "gen" / "cut" / "u01_uniform_shadow.png"   # the silhouette in the wall-shadow grey
+    iw, ih = UNI_WH
+    s_ = UNI_M_PER_PX
+    hook_px = UNI_HOOK_PX
+
+    def uni_card(name, png, kind, dy, dx=0.0, dz=0.0):
+        x0 = -hook_px[0] * s_ + dx
+        x1 = (iw - hook_px[0]) * s_ + dx
+        z1 = 0.012 + hook_px[1] * s_ + dz
+        z0 = 0.012 - (ih - hook_px[1]) * s_ + dz
+        me = bpy.data.meshes.new(name)
+        me.from_pydata([(x0, dy, z0), (x1, dy, z0), (x1, dy, z1), (x0, dy, z1)], [], [(0, 1, 2, 3)])
+        uv = me.uv_layers.new(name="UV")
+        for i_, co in enumerate(((0, 0), (1, 0), (1, 1), (0, 1))):
+            uv.data[i_].uv = co
+        me.update()
+        me.materials.append(kit.mat(name, "#FFFFFF", kind=kind, tex=png, alpha_tex=True))
+        return kit._link(name, me, tuple(hook), (0, 0, 0))
+    uni_ob = uni_card("uniform", UNI_PNG, 0, -0.016)
     ids["uniform"] = uni_ob.pass_index
-    us = Parts("uniform_shadow", [M["sh_wall"]], pivot=hook)
-    ox, oz = 0.04, -0.03
-    pts = [(hx0 - 0.20 + ox, hz - 0.08 + oz), (hx0 - 0.30 + ox, hz - 0.14 + oz), (hx0 - 0.33 + ox, hz - 0.46 + oz), (hx0 - 0.235 + ox, hz - 0.47 + oz), (hx0 - 0.205 + ox, hz - 0.30 + oz),
-           (hx0 - 0.195 + ox, hz - 0.68 + oz), (hx0 + 0.195 + ox, hz - 0.68 + oz), (hx0 + 0.205 + ox, hz - 0.30 + oz), (hx0 + 0.235 + ox, hz - 0.47 + oz), (hx0 + 0.33 + ox, hz - 0.46 + oz),
-           (hx0 + 0.30 + ox, hz - 0.14 + oz), (hx0 + 0.20 + ox, hz - 0.08 + oz)]
-    us.bm.faces.new([us.bm.verts.new(Vector((x, -0.001, z)) - us.pivot) for x, z in pts])
-    us_ob = us.make()
+    us_ob = uni_card("uniform_shadow", UNI_SH, 6, 0.029, 0.04, -0.03)
+    # not drawn: the blouse hangs where the door's casing meets the wall, so its shadow card lay across two surfaces and the
+    # painter outlined it there as a dashed line. Kept as an object only because the swing turns it with the blouse.
+    us_ob.hide_render = True
 
     # ---- right wall: low bookshelf ----
     shelf_x0, shelf_x1 = S.X1 - 0.27, S.X1

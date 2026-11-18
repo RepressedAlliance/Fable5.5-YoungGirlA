@@ -326,13 +326,14 @@ def build_set(M, warm=False):
         cyl("shed_post", (-21.5 + i * 2.75, 13.7, 0), (-21.5 + i * 2.75, 13.7, 2.25), 0.05, M["iron"], seg=6)
         cyl("shed_post", (-21.5 + i * 2.75, 16.3, 0), (-21.5 + i * 2.75, 16.3, 2.25), 0.05, M["iron"], seg=6)
     for n_, (x, y_, r_) in enumerate(((-10.5, 30.0, 2.3), (-24.0, 31.0, 2.8), (12.0, 31.0, 2.4), (25.0, 29.0, 2.9), (-34.0, 27.0, 3.2), (36.0, 26.0, 3.0))):
-        cyl("trunk", (x, y_, 0), (x, y_, 2.6), 0.2, M["trunk"], seg=7)
+        # the trunk runs on up into the crown: stopped at 2.6 it left a gap of sky under the middle mass
+        cyl("trunk", (x, y_, 0), (x, y_, 2.6 + 0.6 * r_), 0.2, M["trunk"], seg=7)
         # a tree is several masses, not one ball; the crown is one flat colour, as in the town
         for dx_, dz_, k_ in ((0, 0.9, 0.86), (-0.62, 0.45, 0.62), (0.66, 0.5, 0.58), (0.1, 1.5, 0.55)):
             crown = blob("crown", (x + dx_ * r_, y_, 2.6 + dz_ * r_), (r_ * k_, r_ * k_, r_ * k_ * 0.85), M["tree"], uid=UID_CROWN + n_)
             crown.visible_shadow = False
-    cyl("flagpole", (9.0, 12.0, 0), (9.0, 12.0, 8.0), 0.05, M["iron"], seg=6)
-    blob("flagball", (9.0, 12.0, 8.07), (0.09, 0.09, 0.09), M["iron"])
+    # 2026-11-17: the flagpole is gone. From this camera it stood exactly across the right-hand tree's crown and read as
+    # running through it; there is nowhere in the yard it can stand clear of the trees and the gate both.
     # sky
     plane("sky", (0, 400, 40), 1800, 500, M["sky"], rot=(math.pi / 2, 0, 0), uid=UID_SKY)
 
@@ -372,7 +373,9 @@ def build_gear(M):
         cable(M, [(away[0], away[1], 0.014), (g["x"] + hand * r.uniform(1.0, 2.2), -13.0 + r.uniform(-0.6, 0.6)), (g["x"] * 1.3 + hand * 3.0, -15.5 + r.uniform(-0.5, 0.5)), (g["x"] * 1.6 + hand * 6.5, -24.0)], i)
     mics(M)
     # folding chairs, left as they were: some between the rows, some at the back
-    for x, y_, yaw in ((-2.6, -8.2, 0.25), (-1.7, -8.3, -0.1), (2.4, -8.2, -0.3), (-3.6, -13.0, 0.15), (-2.8, -13.3, -0.05), (2.6, -13.5, -0.2), (3.45, -13.1, 0.3)):
+    # 2026-11-18: the second one moved from (-1.7, -8.3): as the crane rose, a cameraman's shoes came to rest exactly on its seat.
+    # Where it is now, no one's feet come within 89 px of it on screen in the whole shot (searched over the crane move)
+    for x, y_, yaw in ((-2.6, -8.2, 0.25), (-1.25, -7.55, -0.1), (2.4, -8.2, -0.3), (-3.6, -13.0, 0.15), (-2.8, -13.3, -0.05), (2.6, -13.5, -0.2), (3.45, -13.1, 0.3)):
         chair(M, x, y_, yaw)
     # stepladders between the back-row tripods
     ladder(M, -3.9, -10.9, 1.05)

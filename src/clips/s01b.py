@@ -50,7 +50,8 @@ GATE_M = 1000.0 / E.W           # photo units per pixel of that frame
 TARGET = (500.0, 560.0)         # the middle of the frame, in photo units
 DOOR = (502.6, 596.5)           # the door, where the camera ends up looking
 Z_GATE = 1 / GATE_M             # photo fills the screen and lies on the gate
-Z_APEX = 25.0                   # how far into the dots it goes
+Z_APEX = 25.0                   # how far into the dots it went (no longer used by s01b; s02a's old opening read it)
+TURN_REAL = 0.80                # seconds over which the photo turns into the real gate, ending on the cut to s02a
 BOOST_APEX = 1.10
 
 
@@ -182,8 +183,11 @@ def poly(c, pts, color):
 
 # ---------------------------------------------------------------- what is behind her in each photo
 def gate_still():
-    """The gate with no flash going off: the first frames of the shot are lit by flashes, the photo and the dots are not."""
-    return K.seq_frame("gate", T_END + 24 / 60, T_END)[..., ::-1].astype(np.float32) / 255
+    """The gate with no flash going off: the first frame of the shot, painted without its flashes (src/art/gate_still.py), so the cut to s02a
+    lands on the same people in the same places. The frame 0.4 s on, where no flash fires, stands in until that has been made."""
+    f = ROOT / "work" / "render" / "gate_still.png"
+    im = cv2.imread(str(f)) if f.exists() else K.seq_frame("gate", T_END + 24 / 60, T_END)
+    return im[..., ::-1].astype(np.float32) / 255
 
 
 def gate_photo(frame, tone=False):
@@ -603,7 +607,43 @@ class MediaMachine(E.Clip):
         return 12
 
     def frame_rgb(self, t):
-        return K.soft_frame(self, t)
+        rgb = K.soft_frame(self, t)
+        # the printed photo becomes the place itself: while the push is still going its dots give way to the real gate, the very
+        # picture the photo was printed from, laid exactly over the photo's gate at every moment so nothing shows double, and
+        # spreading out from the middle with a soft edge until it fills the frame on the cut to s02a
+        k = E.ease_io(E.seg(t, T_END - TURN_REAL, T_END), 1.6)
+        if k > 0:
+            if not hasattr(self, "_still"):
+                self._still = gate_still()
+            z, cx, cy = self.photo_map(t)
+            m = z * GATE_M
+            a = np.float32([[m, 0, cx - m * E.W / 2], [0, m, cy - m * E.H / 2]])
+            real = cv2.warpAffine(self._still, a, (E.W, E.H), flags=cv2.INTER_AREA if m < 1 else cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+            # how far inside the real picture each pixel of the screen is, in the picture's own pixels; the soft edge closes up as it lands
+            xs = (np.arange(E.W, dtype=np.float32) - cx) / m + E.W / 2
+            ys = (np.arange(E.H, dtype=np.float32) - cy) / m + E.H / 2
+            inside = np.minimum(np.minimum(xs, E.W - xs)[None, :], np.minimum(ys, E.H - ys)[:, None])
+            feather = max(1e-3, 150.0 * (1 - k))
+            w = np.clip(inside / feather, 0, 1)
+            # the real place opens out from the middle, where the camera is going, with a wide soft front: any one spot turns
+            # in a few frames, and the girl printed at the photo's edge goes last and quickly instead of hanging there as a ghost
+            d = np.sqrt(((xs - E.W / 2) / (E.W / 2))[None, :] ** 2 + ((ys - E.H / 2) / (E.H / 2))[:, None] ** 2)
+            soft = 0.45
+            front = np.clip((E.lerp(-soft, 1.42 + soft, k) - d) / soft, 0, 1)
+            w = (w * w * (3 - 2 * w) * front * front * (3 - 2 * front))[..., None]
+            rgb = rgb * (1 - w) + real * w
+        return rgb
+
+    def photo_map(self, t):
+        """Where the photo is on the screen during the push: (z, cx, cy), the photo at z screen pixels per photo unit with TARGET at (cx, cy)."""
+        tx = PHONE_X[2] + 14 + TARGET[0] * Z0
+        ty = BAR_Y + (TARGET[1] - BAR_PY) * Z0
+        z = self.zoom(t)
+        # one camera moving straight in: the point it ends on comes to the middle in step with the zoom itself
+        move = E.seg(z, Z0, Z_GATE)
+        sx, sy = E.lerp(tx, 960, move), E.lerp(ty, 540, move)
+        fx, fy = focus(z)
+        return z, sx - (fx - TARGET[0]) * z, sy - (fy - TARGET[1]) * z
 
     def scroll(self, fd, t):
         y = fd["stops"][0]
@@ -616,14 +656,13 @@ class MediaMachine(E.Clip):
         return y
 
     def zoom(self, t):
-        """Absolute photo-to-screen zoom on the way to the gate: gathers on the band's accents and never stops."""
-        keys = [(T_PUSH, Z0), (BT(43), 0.38), (BT(45), 1.05), (BT(46), Z_GATE), (BT(47), 2.5), (BT(47.5), 3.5), (T_END, Z_APEX)]
-        for (a, za), (b, zb) in zip(keys, keys[1:]):
-            if t < b:
-                x = E.seg(t, a, b)
-                x = x * 0.55 + E.ease_io(x, 2) * 0.45
-                return math.exp(E.lerp(math.log(za), math.log(zb), x))
-        return keys[-1][1]
+        """Absolute photo-to-screen zoom on the way to the gate. 2026-11-18, as the user asked: one smooth push, no stops on the
+        accents and no dive into the dots: the camera goes into the middle post's photo of the school until the photo fills the
+        frame, where it lies exactly on the first frame of the 3D gate, and the photo turns into the real place (frame_rgb)."""
+        # 2026-11-18, second pass ("not silky enough"): a sine ease, which gets going at once and lands softly, in place of a power
+        # ease that sat still for most of a second, rushed the middle and crawled into the end
+        x = 0.5 - 0.5 * math.cos(math.pi * E.seg(t, T_PUSH, T_END))
+        return math.exp(E.lerp(math.log(Z0), math.log(Z_GATE), x))
 
     # -------------------------------------------------------- magazines
     def draw_table(self, c, t):
@@ -938,14 +977,8 @@ class MediaMachine(E.Clip):
         tx = PHONE_X[2] + 14 + TARGET[0] * Z0
         ty = BAR_Y + (TARGET[1] - BAR_PY) * Z0
         if t >= T_PUSH:
-            z = self.zoom(t)
+            z, sx, sy = self.photo_map(t)
             k = z / Z0
-            move = E.ease_io(E.seg(math.log(z), math.log(Z0), math.log(Z_GATE)), 1.7)
-            sx, sy = E.lerp(tx, 960, move), E.lerp(ty, 540, move)
-            # past the gate frame the aim settles on the door
-            fx, fy = focus(z)
-            sx -= (fx - TARGET[0]) * z
-            sy -= (fy - TARGET[1]) * z
         else:
             z, k, sx, sy = Z0, 1.0, tx, ty
         c.save()

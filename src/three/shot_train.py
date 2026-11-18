@@ -24,6 +24,10 @@ HER_ADS = [f"ad_her_{i:02d}" for i in (1, 0, 3, 2, 5, 4, 7, 6, 9, 8)]
 OTHER_ADS = ["ad_other_onsen", "ad_other_soda", "ad_other_english", "ad_other_condo", "ad_other_movie"]
 
 
+# the top of the bench seats. The outro's car sets it lower (shared_outro.TRAIN_SEAT_TOP), to where its passengers' drawings sit
+SEAT_TOP = 0.455
+
+
 def materials(warm):
     wc = (lambda a, b: b if warm else a)
     return {
@@ -104,20 +108,21 @@ def side(M, s):
     # benches
     for a, b in S.BENCHES:
         c, ln = (a + b) / 2, b - a
-        box("seat", (s * 1.16, c, 0.405), (0.50, ln, 0.10), M["seat"])
-        box("seatback", (s * (S.HW - 0.045), c, 0.68), (0.07, ln, 0.44), M["seat"])
-        box("under", (s * 1.2, c, 0.18), (0.40, ln, 0.34), M["under"])
+        dz = SEAT_TOP - 0.455
+        box("seat", (s * 1.16, c, 0.405 + dz), (0.50, ln, 0.10), M["seat"])
+        box("seatback", (s * (S.HW - 0.045), c, 0.68 + dz / 2), (0.07, ln, 0.44 - dz), M["seat"])
+        box("under", (s * 1.2, c, (0.35 + dz) / 2), (0.40, ln, 0.35 + dz), M["under"])
         n = int(ln / 0.46)
         for k in range(1, n):
             y = a + ln * k / n
-            box("seat_line", (s * 1.14, y, 0.457), (0.46, 0.012, 0.004), M["seat_d"])
+            box("seat_line", (s * 1.14, y, 0.457 + dz), (0.46, 0.012, 0.004), M["seat_d"])
             box("seat_line", (s * (S.HW - 0.082), y, 0.68), (0.004, 0.012, 0.42), M["seat_d"])
         for yy in (a, b):
             if 0.5 < yy < S.LEN - 0.3:
                 # the seat end: a bent grab pipe, not a wall
                 ya = yy
                 pipe("end_rail", (s * 1.40, ya, 0.78), (s * 0.86, ya, 0.78), 0.016, M["rail"])
-                box("side_panel", (s * 1.16, ya, 0.40), (0.50, 0.03, 0.12), M["side"])
+                box("side_panel", (s * 1.16, ya, 0.40 + dz), (0.50, 0.03, 0.12), M["side"])
                 pipe("stanchion", (s * 0.86, yy, 0.0), (s * 0.86, yy, S.STRAP_Z), 0.018, M["rail"])
         # the rack above the seats: rods along, brackets across
         for k in range(4):
@@ -288,6 +293,27 @@ def swing(t, pivots, straps):
         o.rotation_euler = (math.radians(3.0) * s, math.radians(11.0) * s, 0)
 
 
+def bench_room(y, z):
+    """How far across the car a body may reach at this place and height before it is inside a bench (its seat, then its back) or the wall."""
+    if any(a - 0.06 <= y <= b + 0.06 for a, b in S.BENCHES):
+        lim = 0.91 if z <= SEAT_TOP + 0.01 else S.HW - 0.08 if z <= 0.92 else S.HW - 0.03
+    else:
+        lim = S.HW - 0.03
+    return -lim, lim
+
+
+def bench_poles():
+    """The poles at the bench ends and the grab rails off them, as setkit.pull_to_lens_all wants them: [(a, b, radius)]."""
+    out = []
+    for s in (-1, 1):
+        for a, b in S.BENCHES:
+            for yy in (a, b):
+                if 0.5 < yy < S.LEN - 0.3:
+                    out.append(((s * 0.86, yy, 0.0), (s * 0.86, yy, S.STRAP_Z), 0.018))
+                    out.append(((s * 1.40, yy, 0.78), (s * 0.86, yy, 0.78), 0.016))
+    return out
+
+
 def train_pos(p, t):
     return p["x"], p["y"]
 
@@ -308,8 +334,14 @@ def build():
         s_ = 1 if ob.location.x > 0 else -1
         if any(abs(ob.location.y - y) < 0.25 for y in C.hidden_strap_ys(people, s_)):
             ob.hide_render = True
-    crowd = crowdkit.Crowd(people, S.SUN, train_pos)
+    crowd = crowdkit.Crowd(people, S.SUN, train_pos, room=bench_room, poles=bench_poles())
     return sc, cam, pivots, straps, crowd
+
+
+# Left out of the close-ups looking up at the ads (hard cuts on sung lines). 2026-11-18: in the first one only his head and, right
+# above it, his hand on a strap were in the frame (his drawing's forearm goes up behind his head), and the hand seemed to grow
+# out of his head
+CLOSE_HIDE = {"h1"}
 
 
 def set_frame(t, sc, cam, pivots, straps, crowd):
@@ -317,6 +349,16 @@ def set_frame(t, sc, cam, pivots, straps, crowd):
     setkit.set_camera(cam, eye, tg, up, lens=S.lens_at(t))
     swing(t, pivots, straps)
     crowd.place(t, eye)
+    close = bool(S.close_at(t))
+    for p, f in zip(crowd.people, crowd.shown):
+        if p["name"] in CLOSE_HIDE:
+            if close and f is not None:
+                f.show(False)
+            # the car's own strap, which their drawing stood in for, hangs there again while they are out
+            s_ = 1 if p["x"] > 0 else -1
+            for ob in straps:
+                if (1 if ob.location.x > 0 else -1) == s_ and abs(ob.location.y - p["y"]) < 0.25:
+                    ob.hide_render = not close
 
 
 if __name__ == "__main__":

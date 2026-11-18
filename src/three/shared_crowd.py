@@ -26,8 +26,19 @@ def beat_no(t):
     return math.floor((t - BEAT0) / BP + 1e-6)
 
 
-def person(name, pid, x, y, z=0.0, flip=False, seq="ab", every=2, phase=0, height=None, flip_t=None, walk=None, tilt=1.0, near=False, gear=None):
-    return dict(name=name, pid=pid, x=x, y=y, z=z, flip=flip, seq=seq, every=every, phase=phase, height=height, flip_t=flip_t, walk=walk, tilt=tilt, near=near, gear=gear)
+def person(name, pid, x, y, z=0.0, flip=False, seq="ab", every=2, phase=0, height=None, flip_t=None, walk=None, tilt=1.0, near=False, gear=None, lift=0.0, pull=0.0):
+    return dict(name=name, pid=pid, x=x, y=y, z=z, flip=flip, seq=seq, every=every, phase=phase, height=height, flip_t=flip_t, walk=walk, tilt=tilt, near=near, gear=gear, lift=lift, pull=pull)
+
+
+def seen_at(p, x, y, eye):
+    """Where on the floor a lifted sitter's shoes are seen to stand from this eye: the line from the lens through them meets the floor
+    a little further off. Seen from the lens a lifted card is the same person sitting that much further back and that much bigger,
+    so their shadow and the dark patch under their shoes go there."""
+    lift = p.get("lift", 0.0)
+    if not lift or eye is None:
+        return x, y
+    f = eye[2] / (eye[2] - lift)
+    return eye[0] + (x - eye[0]) * f, eye[1] + (y - eye[1]) * f
 
 
 def drawing_at(p, t):
@@ -81,9 +92,13 @@ def gate_people(G):
             pid, seq = ("cg2", "ab") if i % 2 else ("cg3", "ab")
         out.append(person(f"op{i}", pid, ox, oy, flip=i % 4 == 1, seq=seq, every=2, phase=i, gear=i))
         taken.append((ox, oy))
-    # two up on the stepladders, shooting over everyone
-    for k, (x, y, z) in enumerate(((-3.9, -11.28, 0.75), (3.3, -11.58, 0.75))):
-        out.append(person(f"lad{k}", "cg1", x, y, z=z, flip=k == 1, seq="acab", every=1, phase=k * 3))
+    # two up on the stepladders, shooting over everyone. 2026-11-18: on the ladder's third tread (shot_gate.ladder: 0.75 m up,
+    # 0.19 m in front of the top along the ladder's own axis). They stood 0.75 m up but a third of a metre in front of their
+    # ladders, and once the crane rose the ladder showed beside them, not under them
+    for k, (x, y, z) in enumerate(((-3.7335, -10.9955, 0.75), (3.1438, -11.3117, 0.75))):
+        # drawn 0.35 m nearer the lens (crowdkit, setkit.pull_by), so all of the ladder is behind him: as a flat card standing on
+        # the tread he crossed the ladder's top, which cut across his knee as if he stood beside it
+        out.append(person(f"lad{k}", "cg1", x, y, z=z, flip=k == 1, seq="acab", every=1, phase=k * 3, pull=0.35))
     # everybody else, thickening away from the gear: the press first, whoever came to look behind them. No two neighbours are the same person.
     press = {"cg4": "abac", "cg5": "ab", "cg1": "abac", "cg10": "ab"}
     crowd = {"cg6": "ab", "cg7": "ab", "cg8": "ab", "cg9": "ab", "cg10": "ab", "cg13": "ab", "cg5": "ab", "cg4": "abcb"}
@@ -141,7 +156,32 @@ def gate_people(G):
     # what is right in front of the lens: dark heads and shoulders, either side of the line to the door; the crane rises over them
     for k, (pid, x, y_, top, h, seq, ph) in enumerate((("cf1", -0.08, -21.0, 1.64, 0.99, "ab", 0), ("cf3", 1.18, -20.72, 1.72, 0.98, "ab", 1), ("cf2", -0.34, -19.3, 1.62, 0.95, "ab", 2), ("cf1", 1.30, -19.45, 1.68, 0.97, "ba", 1))):
         out.append(person(f"fg{k}", pid, x, y_, z=top - h, flip=k == 3, seq=seq, every=4, phase=ph, height=h, near=True))
+    clear_of_tripods(out, G)
     return out
+
+
+TRIPOD_CLEAR = 0.70    # metres from a tripod's column: its feet are 0.40-0.43 out, and a body is about a quarter of a metre wide
+
+
+def clear_of_tripods(people, G):
+    """2026-11-18: nobody stands inside a tripod. Bystanders had been placed only clear of other people and of the gear's
+    operators, so some stood among a tripod's legs, and as the crane rose a leg crossed their coat. Whoever stands closer to a
+    tripod's column than TRIPOD_CLEAR is moved straight out from it to that distance (round it a little if that is taken);
+    everyone else stays exactly where they were. Operators, the stepladder pair and the heads in front of the lens are left."""
+    gear = [(g["x"], g["y"]) for g in G.GEAR]
+    movable = [p for p in people if p["gear"] is None and not p["walk"] and not p["near"] and not p["name"].startswith("lad")]
+    for p in movable:
+        for gx, gy in gear:
+            d = math.hypot(p["x"] - gx, p["y"] - gy)
+            if d >= TRIPOD_CLEAR:
+                continue
+            a0 = math.atan2(p["x"] - gx, p["y"] - gy) if d > 1e-3 else 0.0
+            for da in (0.0, 0.25, -0.25, 0.5, -0.5, 0.8, -0.8, 1.2, -1.2):
+                a = a0 + da
+                x, y = gx + TRIPOD_CLEAR * math.sin(a), gy + TRIPOD_CLEAR * math.cos(a)
+                if all(math.hypot(x - gx2, y - gy2) >= TRIPOD_CLEAR for gx2, gy2 in gear) and                         all(math.hypot(x - q["x"], y - q["y"]) >= 0.42 for q in people if q is not p):
+                    p["x"], p["y"] = x, y
+                    break
 
 
 def gear_pos(p, G, t):
@@ -185,6 +225,17 @@ def hall_people(K):
 
 
 # --------------------------------------------------------------------------------- the train
+# 2026-11-18: an empty seat between the bald man reading (s1_2) and the old woman (s1_4). From the lens the girl who sat there
+# showed only as brown hair beside his head, as if it grew out of it
+EMPTY_SEATS = {"s1_3"}
+END_CLEAR = 0.22    # metres kept free at each bench end, on top of the half seat the first sitter already has
+# 2026-11-18: how far each sitter's card is lifted so the underside of their thighs comes to the seat (0.455) as the lens sees it. Measured on each
+# drawing, sole to the underside of the thighs where they leave the seat: the old woman's lap ended at 0.38, and the edge of the seat beside her showed
+# at her waist, as if she had sunk into it. Those nearest the lens (y < SIT_LIFT_FROM) are left alone: their laps are below the frame.
+SIT_LIFT = {"ct1": 0.02, "ct2": 0.01, "ct3": 0.01, "ct4": 0.04, "ct5": 0.09, "ct6": 0.09, "ct7": 0.01, "ct8": 0.06, "ct15": 0.03, "ct16": 0.06}
+SIT_LIFT_FROM = 2.2
+
+
 def train_people(R):
     """R is shared_train. The benches are full; the aisle stands. Every head is down over a phone or a weekly, and the weekly has her on the cover."""
     out = []
@@ -195,14 +246,21 @@ def train_people(R):
     for s, ids in ((-1, sit_l), (1, sit_r)):
         i = 0
         for a, b in R.BENCHES:
-            n = int((b - a) / 0.56)
+            # 2026-11-17: nobody sits against a seat end. A sitter's card stands at her feet, 7 cm in front of the end
+            # stanchion, so whoever sat there had the pole running through her arm and her weekly. Keep a body's width clear.
+            a_, b_ = a + END_CLEAR, b - END_CLEAR
+            n = int((b_ - a_) / 0.56 + 0.5)
             for k in range(n):
-                y = a + (k + 0.5) * (b - a) / n + r.uniform(-0.03, 0.03)
+                y = a_ + (k + 0.5) * (b_ - a_) / n + r.uniform(-0.03, 0.03)
                 if y < 1.05:
                     continue    # beside and behind the lens
                 pid = ids[i % len(ids)]
                 i += 1
-                out.append(person(f"s{s}_{i}", pid, s * 0.79, y, flip=s > 0, seq="ab", every=2 if i % 3 else 4, phase=r.randrange(4)))
+                ph = r.randrange(4)
+                if f"s{s}_{i}" in EMPTY_SEATS:
+                    continue
+                out.append(person(f"s{s}_{i}", pid, s * 0.79, y, flip=s > 0, seq="ab", every=2 if i % 3 else 4, phase=ph,
+                                  lift=SIT_LIFT.get(pid, 0.0) if y > SIT_LIFT_FROM else 0.0))
     # standing, holding a strap: the strap is in the drawing, and its ring goes where the car's strap for that place would hang
     hold = ((-1, 3.55, "ct10"), (1, 3.75, "ct11"), (-1, 4.75, "ct9"), (1, 4.70, "ct12"), (-1, 7.65, "ct11"), (1, 7.60, "ct10"), (-1, 8.70, "ct12"), (1, 8.80, "ct9"),
             (-1, 10.2, "ct9"), (1, 10.3, "ct11"), (-1, 11.6, "ct10"), (1, 11.7, "ct12"), (-1, 13.1, "ct11"), (1, 13.3, "ct10"), (-1, 14.9, "ct12"), (1, 15.0, "ct9"), (-1, 16.8, "ct10"), (1, 16.9, "ct11"))
@@ -236,10 +294,11 @@ def person_px(p):
 WIDE = {"cl7": 1.25, "cl14": 1.9, "cl15": 1.9, "cl16": 1.6}
 
 
-def contacts(people, t, pos_fn, half=(0.17, 0.11)):
-    """Under the feet of everyone standing on the floor: dark hard patches in world metres (x, y, half length, half width, angle)."""
+def contacts(people, t, pos_fn, half=(0.17, 0.11), eye=None):
+    """Under the feet of everyone standing on the floor: dark hard patches in world metres (x, y, half length, half width, angle).
+    eye: the lens, for those lifted onto their seat (seen_at)."""
     out = []
     for p in people:
-        x, y = pos_fn(p, t)
+        x, y = seen_at(p, *pos_fn(p, t), eye)
         out.append((x, y, half[0] * WIDE.get(p["pid"], 1.0), half[1], 0.0))
     return out

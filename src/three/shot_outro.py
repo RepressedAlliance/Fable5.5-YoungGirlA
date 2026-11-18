@@ -23,7 +23,6 @@ UID_HER = 9900
 UID_PAPER = 9910
 UID_CURTAIN = 9911
 TALL, WIDE = (1024, 1536), (1536, 1024)
-LEAN_COL = 283       # the middle of her loafers in the sitting lean
 
 
 def gate_marks(M):
@@ -153,6 +152,7 @@ class Drawings:
 
     def __init__(self, sun, table, shadow_scale=(1.0, 1.0), shadow_shift=(0.0, 0.0)):
         self.figs = {}
+        self.current = None
         self.shadow_scale = shadow_scale
         self.shadow_shift = shadow_shift
         for key, (name, px, row, col, wh, *foot) in table.items():
@@ -164,6 +164,7 @@ class Drawings:
         if key in self.figs:
             self.figs[key].place(p, eye)
             place_shadow(self.figs[key], p, eye, self.shadow_scale, self.shadow_shift)
+        self.current = self.figs.get(key)
 
 
 def other_people(scene):
@@ -171,14 +172,16 @@ def other_people(scene):
     figs = {}
     for key, (name, px, row, col, wh, foot) in S.people_table(scene).items():
         figs[key] = setkit.Figure(EXTRAS / f"{name}.png", f"extra_{key}", px, row, col, sun=S.SUNS[scene], img_wh=tuple(wh), uid=UID_HER, shadow_col=foot)
-
     def place(eye, t):
         now = dict(S.people_at(scene, t))
+        place.shown = []
         for k, f in figs.items():
             f.show(k in now)
             if k in now:
                 f.place(now[k], eye)
                 place_shadow(f, now[k], eye)
+                place.shown.append(f)
+    place.shown = []
     return place
 
 
@@ -191,18 +194,14 @@ def walk_table(px=S.WALK_PX):
 
 def her_train():
     # pinned by the middle of her two loafers, each scaled so her head stays one size
-    t = {"sit": ("o03_train_sit", 0.00087, 1489, 283, TALL),
-         "lean": ("o33_train_lean", 0.00090, 1489, LEAN_COL, TALL),
-         "lean2": ("o33_train_lean2", 0.00092, 1484, 516, TALL),
-         "rise": ("o31_train_rise", 0.00092, 1484, 516, TALL),
-         "up": ("o34_train_up", 0.00103, 1493, 497, TALL),
-         "stand": ("o32_train_stand", 0.00108, 1494, 493, TALL)}
+    t = {k: (*v, TALL) for k, v in S.HER_TRAIN.items()}
     t.update(walk_table())
     d = Drawings(S.SUNS["train"], t)
 
     def place(eye, tm):
         key, p = S.train_state(tm)
         d.show(key, p, eye)
+    place.drawings = d
     return place
 
 
@@ -371,9 +370,18 @@ def her_room(M):
     d = Drawings(S.SUNS["classroom"], t)
     poses = [curtain(M, y) for y in (3.25, 5.0, 6.3)]
     poses.append(paper_on_desk(hx, hy))
+    # her chair's back plate (classroom.desk: 0.65 m behind the desk's middle, 15 mm thick, 0.36 wide, 0.62-0.82 high): her card
+    # stood in its middle, so the two crossed and a sliver of her came through the plate as a broken dark line
+    back_y = hy - 0.46 - 0.19 + 0.0075
+
+    def in_back(P):
+        return abs(P.x - hx) < 0.20 and P.z < 0.84
 
     def place(eye, tm):
-        d.show(S.desk_drawing(tm), S.HER_ROOM, eye)
+        key = S.desk_drawing(tm)
+        d.show(key, S.HER_ROOM, eye)
+        if key in d.figs:
+            setkit.push_behind(d.figs[key], eye, (hx, back_y, 0.0), (0.0, -1.0, 0.0), in_back, margin=0.02)
         for f in poses:
             f(tm)
     return place
@@ -398,6 +406,7 @@ def build_scene(i):
             kit.box("slat", (2.45, -0.62 - 0.3 + k * 0.12, 0.05), (0.198, 0.09, 0.02), M["duck"])
         place = her_lockers(M)
     elif name == "train":
+        shot_train.SEAT_TOP = S.TRAIN_SEAT_TOP
         swing = shot_train.build_set(True)
         place = her_train()
     else:
@@ -432,9 +441,16 @@ def build_scene(i):
     kit.sun(sc, S.SUNS[name])
     cam = kit.camera(sc, lens=S.LENSES[name], clip_end=3000)
 
+    poles = shot_train.bench_poles() if name == "train" else ()
+
     def place_all(eye, t):
         place(eye, t)
         people(eye, t)
+        if name == "train":
+            # in the car nobody's card may reach back into the bench behind them, nor come out in front of a person or a
+            # pole that stands in front of them (setkit.pull_to_lens_all)
+            figs = [f for f in [place.drawings.current] + people.shown if f is not None]
+            setkit.pull_to_lens_all(figs, eye, shot_train.bench_room, poles)
     return sc, cam, place_all, swing
 
 

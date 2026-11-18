@@ -200,7 +200,7 @@ def paint_time(exr, t, ids):
     p, pos, ob = paint_windows(p, ids, t, outside_rain)
     p = light_bars(p, pos, ob, t, ids)
     if "crowd" in ids:
-        p = CP.floor_patches(p, C.contacts(PEOPLE, t, lambda q, _: (q["x"], q["y"]), half=(0.20, 0.12)), half_x=1.3, tone=(0.46, 0.47, 0.56))
+        p = CP.floor_patches(p, C.contacts(PEOPLE, t, lambda q, _: (q["x"], q["y"]), half=(0.20, 0.12), eye=S.camera_at(t)[0]), half_x=1.3, tone=(0.46, 0.47, 0.56))
         p = CP.floor_patches(p, wet_patches(S.camera_at(t)[0]), half_x=1.3, tone=WET)
     rgba = comp.paint(p, look(t, ids), ss=S.SS)
     rgb, a = rgba[..., :3], rgba[..., 3:4]

@@ -135,7 +135,8 @@ def throw_light(p, t, uid=None):
     return p
 
 
-def paint_time(exr, t, ids):
+def paint_time(exr, t, ids, lit=True):
+    """lit=False: the frame as if no camera went off on it (the photo s01b prints and turns into, src/art/gate_still.py)."""
     p = comp.read_exr(exr)
     uid = ids.get("crowd", -1)
     if not p["IndexOB"].size or not (abs(p["IndexOB"] - uid) < 0.5).any():
@@ -149,7 +150,8 @@ def paint_time(exr, t, ids):
         col[m] = (col * (BACK_TONE * (1 - k) + NEAR_TONE * k))[m]
         p["DiffCol"] = col
         p = CP.floor_patches(p, feet(t), tone=(0.46, 0.46, 0.56))
-    p = throw_light(p, t, uid)
+    if lit:
+        p = throw_light(p, t, uid)
     rgba = comp.paint(p, look(t, ids), ss=S.SS)
     rgb = rgba[..., :3]
     a = rgba[..., 3:4]

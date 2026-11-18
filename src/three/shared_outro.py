@@ -10,6 +10,7 @@ import shared_cam
 import shared_gate as G
 import shared_lockers as K
 import shared_train as R
+import sitfit
 
 ROOT = Path(__file__).resolve().parents[2]
 SS = 1.5
@@ -72,29 +73,58 @@ STOPPED = BRAKE + 3 * BP
 RISE = CUTS[0] - 6 * BP
 STAND = CUTS[0] - 5 * BP
 WALK_T = CUTS[0] - 4 * BP
-# Her loafers do not move while she gets up: every drawing is pinned by its feet to this one spot. The in-betweens are four frames each, so it reads as one movement.
-HER_FEET = (0.849, 7.006, 0.0)
+# The car's bench seats, lower than the opening's (0.455): the drawings of the people who sit on them, Rin's among them, rest
+# their seats 0.34 to 0.39 m above their soles. At 0.36 each one comes to the cushion within 3 cm of the floor (sitfit).
+# 2026-11-18: it was 0.30, measured to the hems of their skirts and coats, which hang lower than where they sit.
+TRAIN_SEAT_TOP = 0.36
+# Her drawings in the car: (picture, metres a pixel, row of the soles, column pinned: the middle of her loafers), each scaled so her
+# head stays one size
+HER_TRAIN = {"sit": ("o03_train_sit", 0.00087, 1489, 283), "lean": ("o33_train_lean", 0.00090, 1489, 283),
+             "lean2": ("o33_train_lean2", 0.00092, 1484, 516), "rise": ("o31_train_rise", 0.00092, 1484, 516),
+             "up": ("o34_train_up", 0.00103, 1493, 497), "stand": ("o32_train_stand", 0.00108, 1494, 493)}
+HER_SEAT_Y = 6.856
+
+
+def _her_pose():
+    """Where her loafers are while she sits and gets up: {drawing: (x, y, z)}.
+    Sitting and leaning forward over her bag, one place, from sitfit: her seat on the front of the cushion, the skirt hanging over
+    its edge and her shins in front of it. Getting up she draws her feet 8 cm back under her and her seat leaves the cushion by
+    1, then 2 cm, over its edge. (2026-11-18: her seat had floated a few centimetres over it, and her hem and knees rested on
+    the cushion with the shins hanging down through it.)"""
+    eye = camera_at((CUTS[0] - 7 * BP + T0) / 2)[0]
+    fits = {}
+    for key in ("sit", "lean"):
+        name, px, sole, col = HER_TRAIN[key]
+        fits[key] = sitfit.fit(name, f"assets/gen/cut/{name}.png", px, sole, col, False, 1, HER_SEAT_Y, eye, TRAIN_SEAT_TOP, x0=0.65)
+    x = min(f[0] for f in fits.values())
+    z = sum(f[1] for f in fits.values()) / 2
+    pose = {"sit": (x, HER_SEAT_Y, z), "lean": (x, HER_SEAT_Y, z)}
+    for key, up in (("lean2", 0.010), ("rise", 0.020)):
+        name, px, sole, col = HER_TRAIN[key]
+        c = sitfit.CONTACTS[name]
+        pose[key] = (x + 0.08, HER_SEAT_Y, TRAIN_SEAT_TOP + up - (sole - c["row"]) * px)
+    return pose
+
+
 LEAN_T = RISE - 5 / 30
 LEAN2_T = RISE - 2 / 30
 UP_T = STAND - 4 / 30
-TRAIN_WALK0 = (0.78, 7.05, 0.0)   # the first step out from the seat
+STAND_FEET = (0.58, 6.88, 0.0)    # where she stands once she is up: a step out from the seat, clear of it
+TRAIN_WALK0 = (0.50, 6.95, 0.0)   # the first step down the aisle
 TRAIN_WALK1 = (0.05, 8.90, 0.0)   # where the last drawing before the cut comes down
 
 
 def train_state(t):
     """Which drawing (sit, lean, rise, up, stand, or 0-3 of the walk) and where its feet are."""
-    if t < LEAN_T:
-        return "sit", HER_FEET
-    if t < LEAN2_T:
-        return "lean", HER_FEET
-    if t < RISE:
-        return "lean2", HER_FEET
-    if t < UP_T:
-        return "rise", HER_FEET
+    for key, until in (("sit", LEAN_T), ("lean", LEAN2_T), ("lean2", RISE), ("rise", UP_T)):
+        if t < until:
+            return key, HER_POSE[key]
+    # 2026-11-18: standing, she has stepped out into the aisle. Stood where her feet were while she sat, half of her stood
+    # inside the bench
     if t < STAND:
-        return "up", HER_FEET
+        return "up", STAND_FEET
     if t < WALK_T:
-        return "stand", HER_FEET
+        return "stand", STAND_FEET
     a, b = walk_index(WALK_T), walk_index(CUTS[0] - 1e-4)
     u = (walk_index(t) - a) / max(1, b - a)
     p = tuple(x + (y - x) * u for x, y in zip(TRAIN_WALK0, TRAIN_WALK1))
@@ -105,6 +135,11 @@ def train_contact(t):
     """Her dark patch on the car floor, in world metres (x, y, half length, half width, angle): the floor there is mostly out of the window's light, so the sun alone gives her no shadow.
     One under the feet, one thrown a short way along the sun's direction."""
     _, p = train_state(t)
+    if p[2] < 0:
+        # a lowered drawing's shoes are seen where the line from the lens through them meets the floor
+        eye = camera_at(t)[0]
+        f = eye[2] / (eye[2] - p[2])
+        p = (eye[0] + (p[0] - eye[0]) * f, eye[1] + (p[1] - eye[1]) * f, 0.0)
     a = math.atan2(SUNS["train"][1], SUNS["train"][0])
     return [(p[0], p[1], 0.19, 0.115, 0.0), (p[0] + 0.20 * math.cos(a), p[1] + 0.20 * math.sin(a), 0.30, 0.095, a)]
 
@@ -217,7 +252,9 @@ def loafers_home(t):
 CHIN_END = CUTS[2] + 5.0 * BP
 PRESS = CHIN_END + 0.5 * BP
 GUST = CUTS[2] + 2.75 * BP
-HER_ROOM = (-1.71, 2.72, 0.0)     # the card stands against her chair back, as seen from the lens
+# the card stands against her chair back, as seen from the lens. 2026-11-17: 5.5 cm nearer the chair's middle; at -1.71 the
+# left side of her back hung past the chair back, and below it the cut edge of the picture showed
+HER_ROOM = (-1.655, 2.72, 0.0)
 
 
 # She is in the wind too: her hair goes with the curtain and the paper. The body of these drawings is line for line the same picture, only hair, bow and scarf change, six drawings a second.
@@ -272,14 +309,22 @@ def _c(n):
 
 
 # name: (scene, feet x, y, z, height in metres from the feet to the top of the head, the moments it goes (to b, to a, to b, ...))
+# The x and z of those sitting in the car are only where they start: _seat_sitters puts each on the bench. tp3 is a new drawing
+# with shins of a normal length.
 SITTERS = {
     # the office worker's head nods with the rails, lurches as the train brakes, and swings back when it has stopped
-    "tp1": ("train", -0.80, 8.60, 0.0, 1.22, (_b(9), _b(8.6), BRAKE + 0.05, STOPPED + 0.20)),
-    "tp2": ("train", -0.80, 12.40, 0.0, 1.15, (_b(8), _b(6), _b(3.5), _b(1.5))),
+    "tp1": ("train", -0.80, 8.60, 0.0, 1.00, (_b(9), _b(8.6), BRAKE + 0.05, STOPPED + 0.20)),
+    # 2026-11-18: 0.4 m further down the bench (from 12.40). Drawn behind the bench-end pole now, as she must be, the pole ran down
+    # the middle of her face; seen from this lens it lies along the whole of that bench, so it is only moved off her face
+    "tp2": ("train", -0.80, 12.80, 0.0, 1.06, (_b(8), _b(6), _b(3.5), _b(1.5))),
     # she turns a page
-    "tp3": ("train", 0.80, 9.00, 0.0, 1.10, (_b(8.5), _b(7.9), _b(3), _b(2.4))),
+    # 2026-11-17: 0.7 m further from the seat end. A sitter's card stands at her feet, so at 9.0 the lens saw her over the
+    # end of the bench, as if she sat on its corner or in the air
+    # 2026-11-18: and on to 8.70 (from 8.12): Rin sits further out on her seat now (HER_POSE), and from the lens her head
+    # covered this one's face
+    "tp3": ("train", 0.80, 8.70, 0.0, 1.15, (_b(8.5), _b(7.9), _b(3), _b(2.4))),
     "tp4": ("train", -0.75, 15.30, 0.0, 1.72, (BRAKE + 0.10, STOPPED + 0.10)),
-    "tp5": ("train", 0.80, 12.60, 0.0, 1.20, (STOPPED + 0.15, _b(1))),
+    "tp5": ("train", 0.80, 12.60, 0.0, 0.95, (STOPPED + 0.15, _b(1))),
     # the classmates: a girl at her own desk, and three at the front of the room, talking among themselves
     "cs1": ("classroom", -2.75, 5.77, 0.72, 1.13 - 0.72, (_c(1), _c(2), _c(5), _c(6))),
     "cs2": ("classroom", -2.85, 8.40, 0.0, 1.54, (_c(2), _c(3.5), _c(6.5))),
@@ -332,9 +377,14 @@ def contacts(scene, t):
     """The dark patch each of the other people makes on the floor where they touch it, in world metres (x, y, half length, half width, angle). Fixed to the floor, one hard tone."""
     a = math.atan2(SUNS[scene][1], SUNS[scene][0])
     out = []
+    eye = camera_at(t)[0]
     for key, p in people_at(scene, t):
         if p[2] > 0.1:
             continue          # sitting at a desk, seen from the waist up
+        if p[2]:
+            # a card raised or lowered onto its seat: its shoes are seen where the line from the lens through them meets the floor
+            f = eye[2] / (eye[2] - p[2])
+            p = (eye[0] + (p[0] - eye[0]) * f, eye[1] + (p[1] - eye[1]) * f, 0.0)
         out.append((p[0], p[1], 0.17, 0.12, 0.0))
         out.append((p[0] + 0.14 * math.cos(a), p[1] + 0.14 * math.sin(a), 0.24, 0.085, a))
     return out
@@ -381,7 +431,9 @@ def camera_at(t):
         x = max(0.0, t - WALK_T)
         follow = 0.5 * (x * x / 1.8 if x < 0.9 else x - 0.45)
         y = 3.35 + 0.14 * u + follow
-        return (-0.16 + 0.05 * u, y, 1.00), (0.26 + 0.03 * u, y + 4.65, 0.97), (0, 0, 1)
+        # 2026-11-18: tipped down a little (the target from 0.97 to 0.91), so her loafers are inside the frame with room below
+        # them now that she sits right on the seat (HER_POSE)
+        return (-0.16 + 0.05 * u, y, 1.00), (0.26 + 0.03 * u, y + 4.65, 0.91), (0, 0, 1)
     if name == "gate":
         # at her heels, low: her and the posts and the tower behind them, not a lot of road
         y = -9.05 + 2.20 * u
@@ -395,6 +447,29 @@ def camera_at(t):
 
 
 LENSES = {"train": 35.0, "gate": 40.0, "lockers": 85.0, "classroom": 50.0}
+
+
+def _seat_sitters():
+    """The car's passengers on the bench (sitfit): the y each sits at is kept, the x and the height of the card's soles are found
+    so each one's seat rests on the cushion with what hangs below it in front of the seat's edge. The office worker, the woman
+    in the beige coat and the old woman had their skirts and coats resting on the cushion and their shins hanging through it.
+    The young man's bag stands against the board under the seat, so it may touch it."""
+    eye = camera_at((CUTS[0] - 7 * BP + T0) / 2)[0]
+    for name, (sc, x, y, z, h, moves) in list(SITTERS.items()):
+        if sc != "train" or name == "tp4":
+            continue
+        r = EXTRAS[f"{name}_a"]
+        px = h / (r["sole"] - r["top"])
+        side = 1 if x > 0 else -1
+        fits = [sitfit.fit(f"{name}_{d}", f"assets/gen/extras/{name}_{d}.png", px, EXTRAS[f"{name}_{d}"]["sole"], EXTRAS[f"{name}_{d}"]["col"],
+                           False, side, y, eye, TRAIN_SEAT_TOP, base_margin=-0.04 if name == "tp5" else 0.015, x0=x) for d in "ab"]
+        nx = side * min(side * f[0] for f in fits)
+        nz = sum(f[1] for f in fits) / len(fits)
+        SITTERS[name] = (sc, nx, y, nz, h, moves)
+
+
+_seat_sitters()
+HER_POSE = _her_pose()
 
 
 def lens_at(t):
