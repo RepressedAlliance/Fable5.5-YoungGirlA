@@ -38,7 +38,10 @@ TAKE = 195.77
 # her hand wiping: one drawing made from her character sheet (assets/gen/cut/h50_wipe.png; work/eye/key6/gen_a3.py), at its widest no wider than her cuff, as on the sheet. The back of her left hand is towards us;
 # she comes up from below, so only her hand crosses her face, never her forearm. Everything below the knuckles is that drawing, untouched; the
 # fingers are the same drawing bent along their length (see hand_bend), so they trail and relax without the hand ever changing into another picture.
-HAND_S = 0.86
+# 2026-11-17: 0.86 made her hand the size of one eye. A hand held up in front of the face is about as long as the face and
+# its back about two thirds as wide, and nearer the lens than the face: it is drawn at twice that.
+HAND_S = 1.72
+HAND_K = HAND_S / 0.86        # the moves below were laid out for the old size
 HAND_AX = np.array((-0.45, -0.89)) / math.hypot(0.45, 0.89)
 HAND_PERP = np.array((0.89, -0.45)) / math.hypot(0.45, 0.89)
 HAND_O = np.array((800.0, 690.0))
@@ -306,7 +309,7 @@ class OpenEye(E.Clip):
             u = E.seg(q, TAKE - 0.60, TAKE - 0.10)
             if u > 0:
                 k = E.ease_out(u, 2.6)
-                self.wipe_hand(c, 0, E.lerp(end_x + 330, end_x, k), E.lerp(start_y + 860, start_y, k), hs, E.lerp(12, 7, k))
+                self.wipe_hand(c, 0, E.lerp(end_x + 330 * HAND_K, end_x, k), E.lerp(start_y + 860 * HAND_K, start_y, k), hs, E.lerp(12, 7, k))
             return
         u = (q - TAKE) / 0.46
         if u >= 1.6:
@@ -354,8 +357,8 @@ class OpenEye(E.Clip):
         if u > 1.0:
             # then it falls away, down the way the arm came, the fingers relaxing
             v = min((u - 1.0) / 0.6, 1.0)
-            tx += 330 * v ** 1.7
-            ty += 1050 * v ** 1.7
+            tx += 330 * HAND_K * v ** 1.7
+            ty += 1050 * HAND_K * v ** 1.7
             rot += 10 * v
             key = -8 - 14 * min(v / 0.5, 1.0)
         self.wipe_hand(c, key, tx, ty, hs, rot)
